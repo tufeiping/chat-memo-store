@@ -7,7 +7,7 @@ bun install
 bun run start
 ```
 
-访问 http://localhost:3000
+访问 http://localhost:3001
 
 ## 功能
 
