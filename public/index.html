@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chat Memo 统一存储系统</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f5f5; color: #333; line-height: 1.6; padding-top: 180px; }
+    .container { max-width: 1000px; margin: 0 auto; padding: 20px; }
+    header { background: #fff; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); position: fixed; top: 0; left: 50%; transform: translateX(-50%); width: 1000px; z-index: 100; }
+    h1 { font-size: 24px; margin-bottom: 10px; }
+    .stats { display: flex; gap: 20px; margin-bottom: 15px; font-size: 14px; color: #666; }
+    .stats span { background: #e8f4fd; padding: 4px 12px; border-radius: 12px; cursor: pointer; }
+    .stats span.active { background: #007AFF; color: #fff; }
+    .stats span:hover { opacity: 0.8; }
+    .toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .btn { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; transition: background 0.2s; }
+    .btn-primary { background: #007AFF; color: #fff; }
+    .btn-primary:hover { background: #0056b3; }
+    .btn-secondary { background: #34C759; color: #fff; }
+    .btn-secondary:hover { background: #28a745; }
+    .btn-danger { background: #FF3B30; color: #fff; }
+    .btn-danger:hover { background: #dc3545; }
+    .search-box { flex: 1; min-width: 200px; }
+    .search-box input { width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
+    #file-input { display: none; }
+    .conversations { background: #fff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    .conv-item { padding: 16px; border-bottom: 1px solid #eee; cursor: pointer; transition: background 0.2s; }
+    .conv-item:hover { background: #f9f9f9; }
+    .conv-item:last-child { border-bottom: none; }
+    .conv-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+    .conv-title { font-weight: 600; font-size: 15px; }
+    .conv-platform { font-size: 12px; padding: 2px 8px; border-radius: 10px; background: #e8f4fd; color: #007AFF; }
+    .conv-meta { font-size: 12px; color: #999; }
+    .conv-preview { font-size: 13px; color: #666; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .conv-detail { display: none; padding: 16px; background: #fafafa; border-top: 1px solid #eee; }
+    .conv-detail.active { display: block; }
+    .message { margin-bottom: 12px; padding: 10px; border-radius: 6px; }
+    .message-user { background: #e8f4fd; margin-left: 20px; }
+    .message-ai { background: #f0f0f0; margin-right: 20px; }
+    .message-role { font-weight: 600; font-size: 12px; color: #666; margin-bottom: 4px; }
+    .message-content { white-space: pre-wrap; font-size: 14px; }
+    .empty { text-align: center; padding: 40px; color: #999; }
+    .toast { position: fixed; bottom: 20px; right: 20px; background: #333; color: #fff; padding: 12px 20px; border-radius: 6px; opacity: 0; transition: opacity 0.3s; }
+    .toast.show { opacity: 1; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Chat Memo 统一存储系统</h1>
+      <p style="font-size:13px;color:#666;margin-bottom:10px">Chat Memo 浏览器插件可一键保存各大AI助手的聊天记录，<a href="https://chatmemo.ai/" target="_blank" style="color:#007AFF">官网</a></p>
+      <div class="stats" id="stats" onclick="handleStatsClick(event)"></div>
+      <div class="toolbar">
+        <button class="btn btn-primary" onclick="document.getElementById('file-input').click()">导入数据</button>
+        <input type="file" id="file-input" accept=".txt" onchange="importData(event)">
+        <button class="btn btn-secondary" onclick="exportData()">导出数据</button>
+        <button class="btn btn-danger" onclick="clearData()">清空数据</button>
+        <div class="search-box">
+          <input type="text" id="search" placeholder="搜索对话内容..." oninput="search(this.value)">
+        </div>
+      </div>
+    </header>
+    <div class="conversations" id="list"></div>
+  </div>
+  <div class="toast" id="toast"></div>
+
+  <script>
+    let conversations = [];
+    let currentFilter = null;
+
+    async function loadConversations() {
+      const res = await fetch('/api/conversations');
+      conversations = await res.json();
+      render();
+      loadStats();
+    }
+
+    async function loadStats() {
+      const res = await fetch('/api/stats');
+      const stats = await res.json();
+      document.getElementById('stats').innerHTML = 
+        `<span class="platform-tag${currentFilter === null ? ' active' : ''}" data-platform="">总计: ${stats.total}</span>` + 
+        stats.byPlatform.map(p => `<span class="platform-tag${currentFilter === p.platform ? ' active' : ''}" data-platform="${p.platform}">${p.platform}: ${p.count}</span>`).join('');
+    }
+
+    function handleStatsClick(e) {
+      const tag = e.target.closest('.platform-tag');
+      if (!tag) return;
+      currentFilter = tag.dataset.platform || null;
+      loadConversations();
+    }
+
+    function render() {
+      const list = document.getElementById('list');
+      const filtered = currentFilter ? conversations.filter(c => c.platform === currentFilter) : conversations;
+      if (filtered.length === 0) {
+        list.innerHTML = '<div class="empty">暂无数据</div>';
+        return;
+      }
+      list.innerHTML = filtered.map((c, i) => `
+        <div class="conv-item" onclick="toggleDetail(${i})">
+          <div class="conv-header">
+            <div class="conv-title">${escapeHtml(c.title)} ${c.messageCount ? `(${c.messageCount})` : ''}</div>
+            <span class="conv-platform">${c.platform}</span>
+          </div>
+          <div class="conv-meta">${c.created || ''} · ${c.url || ''}</div>
+          <div class="conv-preview">${escapeHtml(c.messages.substring(0, 100))}</div>
+          <div class="conv-detail" id="detail-${i}">${renderMessages(c.messages)}</div>
+        </div>
+      `).join('');
+    }
+
+    function renderMessages(messages) {
+      const parts = messages.split(/(?=^(User|AI):)/m);
+      return parts.map(p => {
+        const match = p.match(/^(User|AI):\s*([\s\S]*)/);
+        if (!match) return '';
+        const role = match[1];
+        const content = match[2].trim();
+        return `<div class="message message-${role.toLowerCase()}">
+          <div class="message-role">${role}</div>
+          <div class="message-content">${escapeHtml(content)}</div>
+        </div>`;
+      }).join('');
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function toggleDetail(i) {
+      const detail = document.getElementById(`detail-${i}`);
+      detail.classList.toggle('active');
+    }
+
+    async function importData(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const text = await file.text();
+      const res = await fetch('/api/import', { method: 'POST', body: text });
+      const result = await res.json();
+      showToast(result.success ? `导入成功: 新增 ${result.added} 条` : `导入失败: ${result.error}`);
+      e.target.value = '';
+      loadConversations();
+    }
+
+    async function exportData() {
+      const res = await fetch('/api/export');
+      const text = await res.text();
+      const blob = new Blob([text], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `chat-memo-${new Date().toISOString().slice(0,10)}.txt`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast('导出成功');
+    }
+
+    async function clearData() {
+      if (!confirm('确定要清空所有数据吗？此操作不可恢复。')) return;
+      await fetch('/api/clear', { method: 'POST' });
+      showToast('已清空');
+      loadConversations();
+    }
+
+    async function search(q) {
+      const res = await fetch(`/api/conversations?q=${encodeURIComponent(q)}`);
+      conversations = await res.json();
+      render();
+    }
+
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      toast.textContent = msg;
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 3000);
+    }
+
+    loadConversations();
+  </script>
+</body>
+</html>

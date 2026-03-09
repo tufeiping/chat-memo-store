@@ -1,0 +1,6 @@
+node_modules/
+chat-memo.db
+chat-memo.exe
+chat-memo-mac
+*.bun-build
+bun.lockb
