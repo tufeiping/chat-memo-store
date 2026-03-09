@@ -10,7 +10,9 @@ db.exec(`
     platform TEXT NOT NULL,
     created TEXT,
     messages TEXT NOT NULL,
-    imported_at TEXT DEFAULT CURRENT_TIMESTAMP
+    message_count INTEGER,
+    imported_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(title, message_count, platform)
   )
 `);
 
@@ -28,10 +30,10 @@ export interface Conversation {
 export function addConversation(conv: Conversation): number {
   try {
     const stmt = db.prepare(`
-      INSERT INTO conversations (title, url, platform, created, messages)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT OR IGNORE INTO conversations (title, url, platform, created, messages, message_count)
+      VALUES (?, ?, ?, ?, ?, ?)
     `);
-    const result = stmt.run([conv.title, conv.url, conv.platform, conv.created, conv.messages]);
+    const result = stmt.run([conv.title, conv.url, conv.platform, conv.created, conv.messages, conv.messageCount || 0]);
     return result.changes;
   } catch (e) {
     console.error("Error adding conversation:", conv.title, e);
