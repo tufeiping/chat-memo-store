@@ -2,7 +2,7 @@
 
 将 **Chat Memo** 浏览器插件存储的各个 LLM Chat 提供商的对话记录保存在浏览器 `localStorage` 中，支持导出为单一文件以便持久化个人不同 LLM Chat的聊天记录。
 
-[ChatMemo 官网](https://chatmemo.ai/)
+[Chat Memo 官网](https://chatmemo.ai/)
 
 **支持的LLM Chat**
 
